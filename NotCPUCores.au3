@@ -99,6 +99,7 @@ Func Main()
 	Local $aCores
 	Local $bInit = True
 	Local $iSleep = 100
+	Local $hLibrary = ""
 	Local $sVersion = "1.7.0.0"
 	Local $iAllCores
 	Local $sPriority = "High"
@@ -423,7 +424,7 @@ Func Main()
 		_GUICtrlListView_RegisterSortCallBack($hGames)
 		GUICtrlSetTip(-1, $_sLang_RefreshTip, $_sLang_Usage)
 
-	_GetSteamGames($hGames)
+	_GetSteamGames($hGames, $hLibrary)
 	_GUICtrlListView_SortItems($hGames, 1)
 	#EndRegion
 	$bPHidden = True
@@ -446,12 +447,22 @@ Func Main()
 
 	#Region ; Sleep Timer GUI
 	$hTimerGUI = GUICreate($_sLang_SleepSet, 240, 120, -1, -1, $WS_POPUP + $WS_CAPTION, $WS_EX_TOOLWINDOW + $WS_EX_TOPMOST)
+
 	GUICtrlCreateLabel($_sLang_SleepText, 10, 5, 220, 45)
 	GUICtrlCreateLabel($_sLang_NewSleep & ":", 10, 60, 110, 20)
+
 	$hSleepTime = GUICtrlCreateInput($iSleep, 120, 55, 40, 20, $ES_RIGHT + $ES_NUMBER)
 	GUICtrlSetLimit(-1, 3, 1)
 	GUICtrlCreateLabel("ms", 165, 60, 20, 15)
-	$hOK = GUICtrlCreateButton("OK", 170, 90, 60, 20)
+
+	$hSleepOK = GUICtrlCreateButton("OK", 170, 90, 60, 20)
+	#EndRegion
+
+	#Region ; Settings UI
+	$hSettingsGUI = GUICreate("Settings", 360, 120, -1, -1, $WS_VISIBLE + $WS_POPUP + $WS_CAPTION, $WS_EX_TOOLWINDOW + $WS_EX_TOPMOST)
+
+
+	$hSettingsOK = GUICtrlCreateButton("OK", 290, 90, 60, 20)
 	#EndRegion
 
 	While 1
@@ -598,10 +609,13 @@ Func Main()
 			Case $hMsg = $hSetTimer
 				GUISetState(@SW_SHOW, $hTimerGUI)
 
-			Case $hMsg = $hOK
+			Case $hMsg = $hSleepOK
 				$iSleep = GUICtrlRead($hSleepTime)
 				GUICtrlSetData($hGetTimer, $_sLang_SleepCurrent & ": " & $iSleep & "ms")
 				GUISetState(@SW_HIDE, $hTimerGUI)
+
+			Case $hMsg = $hSettingsOK
+				GUISetState(@SW_HIDE, $hSettingsGUI)
 
 			Case $hMsg = $hSave
 				If GUICtrlRead($hTask) = "" Then
@@ -632,12 +646,12 @@ Func Main()
 
 			Case $hMsg = $hGames
 				$bRefresh = False
-				_GetSteamGames($hGames)
+				_GetSteamGames($hGames, $hLibrary)
 				_GUICtrlListView_SortItems($hGames, GUICtrlGetState($hGames))
 
 			Case $bRefresh = True
 				$bRefresh = False
-				_GetSteamGames($hGames)
+				_GetSteamGames($hGames, $hLibrary)
 				_GetProcessList($hProcesses)
 				_GUICtrlListView_SortItems($hGames, 0)
 				_GUICtrlListView_SortItems($hProcesses, 0)
@@ -695,22 +709,21 @@ Func Main()
 				ContinueCase
 
 			Case $bInit = True
-				If FileExists(@WorkingDir & "\Autoload.ncc") And $bInit = True Then
-					$hFile = FileOpenDialog($_sLang_LoadProfile, @WorkingDir, "NotCPUCores Profile (*.ncc)", $FD_FILEMUSTEXIST, $sFile, $hGUI)
-					If @error Then
-						;;;
-					Else
-						GUICtrlSetData($hTask       , String(_IniRead($hFile, "General"  , "Process"   ,                                      "",                "")))
-						GUICtrlSetState($hChildren  , Number(_IniRead($hFile, "General"  , "Children"  ,                                      "",    $GUI_UNCHECKED)))
-						GUICtrlSetData($hAssignMode , String(_IniRead($hFile, "General"  , "SplitAs"   , _GUICtrlComboBox_GetList($hAssignMode ),          "Custom")))
-						GUICtrlSetData($hCores      , String(_IniRead($hFile, "General"  , "Threads"   ,                                      "",               "1")))
-						GUICtrlSetData($hPPriority  , String(_IniRead($hFile, "General"  , "Priority"  , _GUICtrlComboBox_GetList($hPPriority  ),            "High")))
-						GUICtrlSetData($hSplitMode  , String(_IniRead($hFile, "Streaming", "SplitAs"   , _GUICtrlComboBox_GetList($hSplitMode  ),             "OFF")))
-						GUICtrlSetData($hBCores     , String(_IniRead($hFile, "Streaming", "Threads"   ,                                      "",               "2")))
-						GUICtrlSetData($hBroadcaster, String(_IniRead($hFile, "Streaming", "Software"  , _GUICtrlComboBox_GetList($hBroadcaster),             "OBS")))
-						GUICtrlSetState($hBroChild  , Number(_IniRead($hFile, "Streaming", "Children"  ,                                      "",    $GUI_UNCHECKED)))
-						GUICtrlSetData($hOAssign    , String(_IniRead($hFile, "Streaming", "Assignment", _GUICtrlComboBox_GetList($hOAssign    ), "Remaining Cores")))
-					EndIf
+				If FileExists(@WorkingDir & "\Settings.ini") And $bInit = True Then
+					$hLibrary = IniRead(@WorkingDir & "\Settings.ini", "Steam", "Library", "")
+					If Not FileExists($hLibrary) Then $hLibrary = ""
+					#cs
+						GUICtrlSetData($hTask       , String(_IniRead(@WorkingDir & "\Autoload.ncc", "General"  , "Process"   ,                                      "",                "")))
+						GUICtrlSetState($hChildren  , Number(_IniRead(@WorkingDir & "\Autoload.ncc", "General"  , "Children"  ,                                      "",    $GUI_UNCHECKED)))
+						GUICtrlSetData($hAssignMode , String(_IniRead(@WorkingDir & "\Autoload.ncc", "General"  , "SplitAs"   , _GUICtrlComboBox_GetList($hAssignMode ),          "Custom")))
+						GUICtrlSetData($hCores      , String(_IniRead(@WorkingDir & "\Autoload.ncc", "General"  , "Threads"   ,                                      "",               "1")))
+						GUICtrlSetData($hPPriority  , String(_IniRead(@WorkingDir & "\Autoload.ncc", "General"  , "Priority"  , _GUICtrlComboBox_GetList($hPPriority  ),            "High")))
+						GUICtrlSetData($hSplitMode  , String(_IniRead(@WorkingDir & "\Autoload.ncc", "Streaming", "SplitAs"   , _GUICtrlComboBox_GetList($hSplitMode  ),             "OFF")))
+						GUICtrlSetData($hBCores     , String(_IniRead(@WorkingDir & "\Autoload.ncc", "Streaming", "Threads"   ,                                      "",               "2")))
+						GUICtrlSetData($hBroadcaster, String(_IniRead(@WorkingDir & "\Autoload.ncc", "Streaming", "Software"  , _GUICtrlComboBox_GetList($hBroadcaster),             "OBS")))
+						GUICtrlSetState($hBroChild  , Number(_IniRead(@WorkingDir & "\Autoload.ncc", "Streaming", "Children"  ,                                      "",    $GUI_UNCHECKED)))
+						GUICtrlSetData($hOAssign    , String(_IniRead(@WorkingDir & "\Autoload.ncc", "Streaming", "Assignment", _GUICtrlComboBox_GetList($hOAssign    ), "Remaining Cores")))
+					#ce
 				EndIf
 				$bInit = False
 				ContinueCase
@@ -1296,11 +1309,15 @@ Func _GetProcessList($hControl)
 
 EndFunc
 
-Func _GetSteamGames($hControl)
+Func _GetSteamGames($hControl, $hLibrary)
 
 	_GUICtrlListView_DeleteAllItems($hControl)
 
-	Local $aSteamLibraries = _GetSteamLibraries()
+	If $hLibrary = "" Then
+		Local $aSteamLibraries = _GetSteamLibraries()
+	Else
+		Local $aSteamLibraries = _GetSteamLibraries($hLibrary)
+	EndIf
 	Local $aSteamGames
 	For $iLoop1 = 1 To $aSteamLibraries[0] Step 1
 		$aSteamGames = _SteamGetGamesFromLibrary($aSteamLibraries[$iLoop1])
